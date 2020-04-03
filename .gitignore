@@ -1,3 +1,4 @@
-./__pycache
+client/__pycache__
+server/__pycache__
 *.log
 *.sqlite3
