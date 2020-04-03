@@ -1,3 +1,7 @@
+# FILE HANDLIG
+DB_NAME = "server.sqlite3"
+PARENT_FOLDER = "./server_files"
+
 # SOCKET
 
 # OPERATING SYSTEM
