@@ -1,6 +1,7 @@
 import console
 import datetime
 
+
 class Logger:
     def __init__(self):
         self.logs = []

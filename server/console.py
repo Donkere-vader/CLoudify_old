@@ -2,6 +2,7 @@ import os
 import g
 import server
 
+
 class Console:
     def __init__(self):
         pass
