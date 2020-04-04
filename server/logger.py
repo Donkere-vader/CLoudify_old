@@ -29,4 +29,4 @@ class Logger:
         log_file.write(f"[{formatted_time}] {str(txt)}\n")
         log_file.close()
 
-        self.console.update()
+        self.console.update(self.logs)
