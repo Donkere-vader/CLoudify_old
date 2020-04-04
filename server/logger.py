@@ -3,9 +3,9 @@ import datetime
 
 
 class Logger:
-    def __init__(self):
+    def __init__(self, log_file_name):
         self.logs = []
-        self.log_file_name = "server.log"
+        self.log_file_name = log_file_name
         self.console = console.Console()
 
     def get_formatted_time(self):

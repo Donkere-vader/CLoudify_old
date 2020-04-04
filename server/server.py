@@ -1,10 +1,11 @@
-from g import PARENT_FOLDER, PORT, HEADERSIZE, IP
+from g import PARENT_FOLDER, PORT, HEADERSIZE, IP, DB_NAME, SYNC_TIME_OUT
 import file_handling
 import logger
 import pickle
 import socket
 import threading
 import os
+import time
 
 
 class SendObject:
@@ -21,7 +22,7 @@ class Server:
         self.threads = []
         self.connections = []
 
-        self.logger = logger.Logger()
+        self.logger = logger.Logger("server.log")
         self.file_handling = file_handling.FileHandler(PARENT_FOLDER)
 
         self.logger.log("Starting...", type="plus")
@@ -32,9 +33,8 @@ class Server:
         self.sock.listen(5)
 
         self.logger.log(f"Server now online at ({socket.gethostbyname(socket.gethostname())}, {PORT})", type="plus")
-        self.listen()
 
-    def listen(self):
+    def start(self):
         while True:
             connection, address = self.sock.accept()
 
@@ -42,9 +42,9 @@ class Server:
 
             self.connections.append(
                 {
-                    "connection":connection,
-                    "address":address,
-                    "device_ID":None
+                    "connection": connection,
+                    "address": address,
+                    "device_ID": None
                 }
             )
 
@@ -72,7 +72,7 @@ class Server:
                     data_len = int(data.decode("utf-8"))
                 else:
                     full_data += data
-                
+
                 if len(full_data) >= data_len:
                     new_data = True
 
@@ -85,9 +85,10 @@ class Server:
 
                     full_data = full_data[data_len:]
 
-
     def handle_data(self, data, connection):
         data = pickle.loads(data)
+
+        self.logger.log(f"Incomming {data.type}...", type="plus")
 
         if data.type == 'file':
             self.create_path(data.info['path'])
@@ -95,6 +96,10 @@ class Server:
             f = open(f"{PARENT_FOLDER}/{data.info['path']}/{data.info['name']}", "wb")
             f.write(data.file)
             f.close()
+
+            self.file_handling.recieved_file(data.info['name'], data.info['path'])
+
+            self.logger.log(f"Recieved {data.info['path']}/{data.info['name']} succesfully")
 
         elif data.type == 'file_req':
             self.send(
@@ -107,14 +112,9 @@ class Server:
                 path=data.info['path'],
                 name=data.info['name']
             )
-                
 
         elif data.type == 'updates':
             self.file_handling.file_update(data.info, data.device_ID)
-
-        elif data.type == 'full_index':
-            # to make a full sync and check everything TODO
-            pass
 
     def create_path(self, path):
         """ Creates paths to files """
@@ -126,6 +126,31 @@ class Server:
                 os.mkdir(done_path + directory + "/")
             finally:
                 done_path += directory + "/"
+
+    def get_connection_by_device_ID(self, device_ID):
+        for c in self.connections:
+            if c['device_ID'] == device_ID:
+                return c
+        return None
+
+    def sync_server(self):
+        files = self.file_handling.to_be_requested_files()
+
+        for f in files:
+            connection = self.get_connection_by_device_ID(f['origin'])['connection']
+            if connection:
+                self.send(
+                    type="file_req",
+                    name=f['name'],
+                    path=f['path'],
+                    connection=connection
+                )
+
+    def sync_loop(self):
+        """ Check all files now and then """
+        while True:
+            self.sync_server()
+            time.sleep(SYNC_TIME_OUT)
 
     def send(self, type, connection, file=None, **kwargs):
         """ Make a beautifull SendObject and convert it to bytes and send it to <connection> """
@@ -145,6 +170,3 @@ class Server:
         self.logger.send(f"Sending {type} to {connection}", type="plus")
 
         connection.send(fullBData)
-
-global SERVER
-SERVER = Server()

@@ -9,50 +9,68 @@ class FileHandler:
     def __init__(self, folder):
         self.parent_folder = folder
 
-    def index(self, folder=None, path=None):
-        """ Index the server files to know what files are there. """
-
-        if not folder:
-            folder = self.parent_folder
-
-        if not path:
-            path = folder
-
-        try:
-            items = os.listdir(folder)
-        except PermissionError:
-            return []
-
+    def to_be_requested_files(self):
+        db = sqlite3.connect(DB_NAME)
         files = []
 
-        for i in items:  # i stands for item
-            try:
-                files += self.index(folder=path + "/" + i, path=path + "/" + i)
-            except (NotADirectoryError, FileNotFoundError):
-                f = {  # f stands for file
-                    "name": i,
-                    "path": path[len(self.parent_folder)+1:],  # + 1 for the first '/'
-                    "last_changed": os.path.getmtime(path + "/" + i)
-                }  # f stands for file
-                files.append(f)
+        for f in db.execute(f"SELECT name, path, origin FROM files WHERE file_on_server=false;").fetchall():
+            files.append(
+                {
+                    "name":f[0],
+                    "path":f[1],
+                    "origin":f[2]
+                }
+            )
 
+        db.close()
         return files
+
+    def recieved_file(self, name, path):
+        db = sqlite3.connect(DB_NAME)
+
+        db.execute(f"UPDATE files SET file_on_server=true WHERE name='{sql_ready(name)}' AND path='{sql_ready(path)}';")
+
+        db.commit()
+        db.close()
 
     def file_update(self, file_info, device_ID):
         db = sqlite3.connect(DB_NAME)
 
         if file_info['deleted']:
-            file_on_server = True
+            # remove the file
             try:
                 os.remove(
-                    f"{PARENT_FOLDER}/{file_info['path']}/{file_info['name']}"
+                    f"{self.parent_folder}/{file_info['path']}/{file_info['name']}"
                 )
-            except FileNotFoundError:
-                file_on_server = False
+            except FileNotFoundError: # file was never on the server
+                db.close()
+                return
             
-            if file_on_server:
-                db.execute(f"UPDATE files SET deleted=true, last_changed={file_info['last_changed']} WHERE name={sql_ready(file_info['name'])} AND path={sql_ready(file_info['path'])};")
-        
+            db.execute(f"UPDATE files SET deleted=true WHERE name='{sql_ready(file_info['name'])}' AND path='{sql_ready(file_info['path'])}';")
+
+        else:
+            file_on_server = db.execute(f"SELECT last_changed FROM files WHERE name='{sql_ready(file_info['name'])}' AND path='{sql_ready(file_info['path'])}';").fetchone()
+            
+            if file_on_server and file_on_server[0] < file_info['last_changed']:
+                # the file is updated
+                db.execute(f"UPDATE files SET file_on_server=false, deleted=false, origin={device_ID} WHERE name='{sql_ready(file_info['name'])}' AND path='{sql_ready(file_info['path'])}';")
+
+            elif not file_on_server:
+                # it's a new file
+                db.execute(f"INSERT INTO files (name, path, last_changed, origin) VALUES ('{sql_ready(file_info['name'])}', '{sql_ready(file_info['path'])}', {file_info['last_changed']}, {device_ID});")
+
+                file_ID = db.execute(f"SELECT ID FROM files  WHERE name='{sql_ready(file_info['name'])}' AND path='{sql_ready(file_info['path'])}';").fetchone()[0]
+
+                db.execute(f"INSERT INTO device_knows_files (file_ID, last_changed, device_ID) VALUES ('{file_ID}', {file_info['last_changed']}, {device_ID});")
+
+            else:
+                db.close()
+                return
+
+        file_ID = db.execute(f"SELECT ID FROM files  WHERE name='{sql_ready(file_info['name'])}' AND path='{sql_ready(file_info['path'])}';").fetchone()[0]
+
+        db.execute(f"UPDATE files SET last_changed={file_info['last_changed']} WHERE ID={file_ID};")
+        db.execute(f"UPDATE device_knows_files SET last_changed={file_info['last_changed']} WHERE file_ID={file_ID};")
     
 
         db.commit()
