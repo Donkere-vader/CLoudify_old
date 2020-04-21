@@ -13,4 +13,4 @@ HEADERSIZE = 20
 SYNC_TIME_OUT = 5 # seconds
 
 # OPERATING SYSTEM
-OPERATING_SYSTEM = "Linux" # 'Windows', 'Linux' or 'Mac'
+OPERATING_SYSTEM = "Windows" # 'Windows', 'Linux' or 'Mac'

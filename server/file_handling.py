@@ -1,4 +1,4 @@
-from g import PARENT_FOLDER, DB_NAME
+from g import DB_NAME
 import sqlite3
 import os
 
@@ -25,7 +25,7 @@ class FileHandler:
         db.close()
         return files
 
-    def recieved_file(self, name, path):
+    def received_file(self, name, path):
         db = sqlite3.connect(DB_NAME)
 
         db.execute(f"UPDATE files SET file_on_server=true WHERE name='{sql_ready(name)}' AND path='{sql_ready(path)}';")
@@ -61,8 +61,9 @@ class FileHandler:
 
                 file_ID = db.execute(f"SELECT ID FROM files  WHERE name='{sql_ready(file_info['name'])}' AND path='{sql_ready(file_info['path'])}';").fetchone()[0]
 
-                db.execute(f"INSERT INTO device_knows_files (file_ID, last_changed, device_ID) VALUES ('{file_ID}', {file_info['last_changed']}, {device_ID});")
-
+                for crsr in db.execute(f"SELECT ID FROM device_IDs;").fetchall():
+                    db.execute(f"INSERT INTO device_knows_files (file_ID, last_changed, device_ID) VALUES ({file_ID}, 0.0, {crsr[0]});")
+                    
             else:
                 db.close()
                 return
@@ -70,8 +71,47 @@ class FileHandler:
         file_ID = db.execute(f"SELECT ID FROM files  WHERE name='{sql_ready(file_info['name'])}' AND path='{sql_ready(file_info['path'])}';").fetchone()[0]
 
         db.execute(f"UPDATE files SET last_changed={file_info['last_changed']} WHERE ID={file_ID};")
-        db.execute(f"UPDATE device_knows_files SET last_changed={file_info['last_changed']} WHERE file_ID={file_ID};")
+        db.execute(f"UPDATE device_knows_files SET last_changed={file_info['last_changed']} WHERE device_ID={device_ID} AND file_ID={file_ID};")
     
 
         db.commit()
         db.close()
+
+    def get_updates(self, device_ID):
+        db = sqlite3.connect(DB_NAME)
+
+        updates = []
+
+        files = db.execute("SELECT ID, name, path, last_changed, deleted FROM files;").fetchall()
+
+        for f in files:
+            device_knows = db.execute(f"SELECT last_changed FROM device_knows_files WHERE file_ID={f[0]} AND device_ID={device_ID};").fetchone()
+
+
+            if device_knows[0] < f[3]:
+                db.execute(f"UPDATE device_knows_files SET last_changed={f[3]} WHERE file_ID={f[0]};")
+                updates.append({
+                    "name":f[1],
+                    "path":f[2],
+                    "last_changed":f[3],
+                    "deleted":f[4]
+                }) 
+
+        return updates
+
+    def new_device(self):
+        db = sqlite3.connect(DB_NAME)
+
+        id = 0
+
+        while db.execute(f"SELECT ID FROM device_IDs WHERE ID={id};").fetchone():
+            id += 1
+
+        db.execute(f"INSERT INTO device_IDs (ID) VALUES ({id});")
+
+        for f in db.execute("SELECT ID, last_changed FROM files;").fetchall():
+            db.execute(f"INSERT INTO device_knows_files (file_ID, device_ID, last_changed) VALUES ({f[0]}, {id}, 0);")
+
+        db.commit()
+        db.close()
+        return id

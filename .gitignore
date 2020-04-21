@@ -1,4 +1,7 @@
 client/__pycache__
+client/client_files
 server/__pycache__
+server/server_files
 *.log
 *.sqlite3
+client/config.json

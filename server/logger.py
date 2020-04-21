@@ -1,12 +1,11 @@
-import console
 import datetime
 
 
 class Logger:
-    def __init__(self, log_file_name):
+    def __init__(self, log_file_name, console):
         self.logs = []
         self.log_file_name = log_file_name
-        self.console = console.Console()
+        self.console = console
 
     def get_formatted_time(self):
         """ Returns the current time for use in the .log and console in day/month/year hour:minute.second format"""
